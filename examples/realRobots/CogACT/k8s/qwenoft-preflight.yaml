@@ -43,16 +43,21 @@ spec:
                   CODE_REV=9779b4dde95d6b4b72d210109cf8fba8ffc50201
                   JOB_TAG=starvla-cogact-qwenoft-preflight-${CODE_REV:0:7}
                   DST=/data/yuming/code_copies/$JOB_TAG
-                  rm -rf "$DST"
-                  git clone --depth 10 --branch cogact_baseline https://github.com/starrliu/starVLA.git "$DST"
+                  if [[ ! -d "$DST/.git" ]]; then
+                    git clone --depth 10 --branch cogact_baseline https://github.com/starrliu/starVLA.git "$DST"
+                  fi
                   cd "$DST"
                   git checkout "$CODE_REV"
                   test "$(git rev-parse HEAD)" = "$CODE_REV"
 
-                  python -m venv --system-site-packages .venv
-                  . .venv/bin/activate
-                  python -m pip install --upgrade pip setuptools wheel
-                  python -m pip install --no-cache-dir -r examples/realRobots/CogACT/requirements-cluster.txt
+                  if [[ ! -x .venv/bin/accelerate ]]; then
+                    python -m venv --system-site-packages .venv
+                    . .venv/bin/activate
+                    python -m pip install --upgrade pip setuptools wheel
+                    python -m pip install --no-cache-dir -r examples/realRobots/CogACT/requirements-cluster.txt
+                  else
+                    . .venv/bin/activate
+                  fi
                   python -m pip install --no-deps -e .
                   python - <<'PY'
                   import torch, torchvision, transformers, deepspeed
@@ -82,6 +87,7 @@ spec:
                   GLOBAL_BATCH_SIZE=512 \
                   BATCH_SIZE=8 \
                   NUM_WORKERS=4 \
+                  DATA_ROOT=/data/liluo/msra_process \
                   MAX_STEPS=20 \
                   RUN_ROOT_DIR=/data/yuming/starvla/checkpoints \
                   RUN_ID="$RUN_ID" \
