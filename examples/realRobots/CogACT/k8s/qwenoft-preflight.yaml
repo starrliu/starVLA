@@ -1,0 +1,99 @@
+apiVersion: batch.volcano.sh/v1alpha1
+kind: Job
+metadata:
+  name: yuming-starvla-cogact-qwenoft-preflight
+  namespace: bonete05
+spec:
+  queue: bonete05
+  minAvailable: 1
+  plugins: {ssh: [], svc: [], env: []}
+  tasks:
+    - name: server
+      replicas: 1
+      template:
+        metadata:
+          labels:
+            app: yuming-starvla-cogact-qwenoft-preflight
+        spec:
+          schedulerName: volcano
+          restartPolicy: Never
+          volumes:
+            - name: dshm
+              emptyDir: {medium: Memory, sizeLimit: 100Gi}
+            - name: data
+              persistentVolumeClaim: {claimName: pvc-vast-bonete05}
+          tolerations:
+            - {key: rdma, operator: Exists, effect: NoSchedule}
+            - {key: nvidia.com/gpu, operator: Exists, effect: NoSchedule}
+          containers:
+            - name: server
+              image: pytorch/pytorch:2.8.0-cuda12.8-cudnn9-devel
+              volumeMounts:
+                - {name: dshm, mountPath: /dev/shm}
+                - {name: data, mountPath: /data}
+              command: ["/bin/bash", "-lc"]
+              args:
+                - |
+                  set -euo pipefail
+                  export DEBIAN_FRONTEND=noninteractive
+                  apt-get update -y
+                  apt-get install -y --no-install-recommends git libgl1 libglib2.0-0
+
+                  CODE_REV=ff90d61ab67be04f52ec222efd4d8b4b1cccb353
+                  JOB_TAG=starvla-cogact-qwenoft-preflight-${CODE_REV:0:7}
+                  DST=/data/yuming/code_copies/$JOB_TAG
+                  rm -rf "$DST"
+                  git clone --depth 1 --branch cogact_baseline https://github.com/starrliu/starVLA.git "$DST"
+                  cd "$DST"
+                  git checkout "$CODE_REV"
+                  test "$(git rev-parse HEAD)" = "$CODE_REV"
+
+                  python -m venv --system-site-packages .venv
+                  . .venv/bin/activate
+                  python -m pip install --upgrade pip setuptools wheel
+                  python -m pip install --no-cache-dir -r examples/realRobots/CogACT/requirements-cluster.txt
+                  python -m pip install --no-deps -e .
+                  python - <<'PY'
+                  import torch, torchvision, transformers, deepspeed
+                  print("torch", torch.__version__, "cuda", torch.version.cuda)
+                  print("torchvision", torchvision.__version__)
+                  print("transformers", transformers.__version__)
+                  print("deepspeed", deepspeed.__version__)
+                  assert torch.cuda.device_count() == 8
+                  PY
+
+                  export WANDB_MODE=disabled
+                  export PYTHONUNBUFFERED=1
+                  export OMP_NUM_THREADS=1
+                  export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
+                  export TORCH_NCCL_ASYNC_ERROR_HANDLING=1
+                  export NCCL_ASYNC_ERROR_HANDLING=1
+                  export NCCL_TIMEOUT=1800000
+                  export OPENCV_FFMPEG_READ_ATTEMPTS=10000000
+
+                  RUN_ID=cogact-all-v5-qwenoft-preflight
+                  rm -rf "/data/yuming/starvla/checkpoints/$RUN_ID"
+                  mkdir -p /data/yuming/logs
+                  START_TIME="$(TZ=Asia/Shanghai date +%Y%m%d_%H%M%S)"
+                  FRAMEWORK=qwenoft \
+                  NUM_PROCESSES=8 \
+                  USE_DEEPSPEED=1 \
+                  GLOBAL_BATCH_SIZE=512 \
+                  BATCH_SIZE=8 \
+                  NUM_WORKERS=4 \
+                  MAX_STEPS=20 \
+                  RUN_ROOT_DIR=/data/yuming/starvla/checkpoints \
+                  RUN_ID="$RUN_ID" \
+                    bash examples/realRobots/CogACT/train_files/run_cogact_train.sh \
+                    2>&1 | tee "/data/yuming/logs/${RUN_ID}_${START_TIME}.log"
+              resources:
+                requests:
+                  nvidia.com/gpu: "8"
+                  cpu: "104"
+                  memory: "2600Gi"
+                  rdma/rdma_shared_device_a: "1"
+                limits:
+                  nvidia.com/gpu: "8"
+                  cpu: "104"
+                  memory: "2600Gi"
+                  rdma/rdma_shared_device_a: "1"
