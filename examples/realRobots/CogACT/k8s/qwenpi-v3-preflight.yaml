@@ -40,7 +40,7 @@ spec:
                   apt-get update -y
                   apt-get install -y --no-install-recommends git libgl1 libglib2.0-0
 
-                  CODE_REV=ff90d61ab67be04f52ec222efd4d8b4b1cccb353
+                  CODE_REV=9779b4dde95d6b4b72d210109cf8fba8ffc50201
                   JOB_TAG=starvla-cogact-qwenpi-v3-preflight-${CODE_REV:0:7}
                   DST=/data/yuming/code_copies/$JOB_TAG
                   rm -rf "$DST"
