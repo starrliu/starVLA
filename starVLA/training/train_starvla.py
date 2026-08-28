@@ -47,8 +47,13 @@ from starVLA.model.framework.share_tools import apply_config_compat
 from starVLA.training.trainer_utils.config_tracker import AccessTrackedConfig, wrap_config
 from starVLA.training.trainer_utils.trainer_tools import TrainerUtils, build_param_lr_groups, setup_optimizer_and_scheduler, normalize_dotlist_args
 
-deepspeed_plugin = DeepSpeedPlugin()
-accelerator = Accelerator(deepspeed_plugin=deepspeed_plugin)
+use_deepspeed = os.environ.get("STARVLA_USE_DEEPSPEED", "1").lower() not in {"0", "false", "no"}
+gradient_accumulation_steps = int(os.environ.get("STARVLA_GRADIENT_ACCUMULATION_STEPS", "1"))
+deepspeed_plugin = DeepSpeedPlugin() if use_deepspeed else None
+accelerator = Accelerator(
+    deepspeed_plugin=deepspeed_plugin,
+    gradient_accumulation_steps=gradient_accumulation_steps,
+)
 accelerator.print(accelerator.state)
 
 # Sane Defaults
@@ -76,8 +81,12 @@ def setup_directories(cfg) -> Path:
 
 def prepare_data(cfg, accelerator, output_dir) -> DataLoader:
     """Prepare VLA training data."""
-    logger.info(f"Creating VLA Dataset with Mixture `{cfg.datasets.vla_data.data_mix}`")
-    vla_train_dataloader = build_dataloader(cfg=cfg, dataset_py=cfg.datasets.vla_data.dataset_py)
+    vla_data_cfg = cfg.datasets.vla_data
+    data_description = vla_data_cfg.get("data_mix", None)
+    if data_description is None:
+        data_description = [item.get("name", item.get("folder")) for item in vla_data_cfg.get("dataset_list", [])]
+    logger.info(f"Creating VLA Dataset with Mixture `{data_description}`")
+    vla_train_dataloader = build_dataloader(cfg=cfg, dataset_py=vla_data_cfg.dataset_py)
 
     accelerator.dataloader_config.dispatch_batches = False
     if dist.is_initialized():
@@ -266,7 +275,7 @@ class VLATrainer(TrainerUtils):
             save_format = getattr(self.config.trainer, "save_format", "pt")
             checkpoint_path = os.path.join(self.checkpoint_dir, f"steps_{self.completed_steps}")
 
-            state_dict = self.accelerator.get_state_dict(self.model)
+            state_dict = self._get_model_state_dict()
             if save_format == "safetensors":
                 from safetensors.torch import save_file
 
@@ -374,9 +383,7 @@ class VLATrainer(TrainerUtils):
         """Run simple action-eval on current batch and attach score to metrics."""
         examples = self._get_next_batch()
         actions = [example["action"] for example in examples]
-        output_dict = self.accelerator.unwrap_model(self.model).predict_action(
-            examples=examples, use_ddim=True, num_ddim_steps=20
-        )
+        output_dict = self._unwrap_model().predict_action(examples=examples, use_ddim=True, num_ddim_steps=20)
 
         if self.accelerator.is_main_process:
             normalized_actions = output_dict["normalized_actions"]
@@ -427,13 +434,24 @@ class VLATrainer(TrainerUtils):
             "action_dit_loss": action_loss.item(),
         }
 
+    def _unwrap_model(self):
+        """Unwrap without importing an unavailable/broken DeepSpeed install."""
+        if self.accelerator.state.deepspeed_plugin is None:
+            return getattr(self.model, "module", self.model)
+        return self.accelerator.unwrap_model(self.model)
+
+    def _get_model_state_dict(self):
+        if self.accelerator.state.deepspeed_plugin is None:
+            return self._unwrap_model().state_dict()
+        return self.accelerator.get_state_dict(self.model)
+
     def _finalize_training(self):
         """Training end processing."""
         if self.accelerator.is_main_process:
             save_format = getattr(self.config.trainer, "save_format", "pt")
             final_checkpoint = os.path.join(self.config.output_dir, "final_model")
             os.makedirs(final_checkpoint, exist_ok=True)
-            state_dict = self.accelerator.get_state_dict(self.model)
+            state_dict = self._get_model_state_dict()
             if save_format == "safetensors":
                 from safetensors.torch import save_file
 

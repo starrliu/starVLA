@@ -162,6 +162,9 @@ class Qwenvl_OFT(baseframework):
         batch_images = [example["image"] for example in examples]  #  [B, [PLT]]
         instructions = [example["lang"] for example in examples]  # [B, str]
         actions = [example["action"] for example in examples]  # label [B, len, 7]
+        action_masks = (
+            [example["action_mask"] for example in examples] if "action_mask" in examples[0] else None
+        )
         state = (
             [example["state"] for example in examples] if "state" in examples[0] else None
         )  # List[ndarray (1, state_dim)] or None
@@ -205,8 +208,18 @@ class Qwenvl_OFT(baseframework):
             )  # [B, T_full, action_dim]
             actions_target = actions[:, -self.action_horizon :, :]  # (B, action_horizon, action_dim)
 
-            # Compute L1 loss
-            action_loss = self.l1_loss(pred_actions, actions_target)
+            # Compute L1 loss. Native episodic datasets may mark repeated
+            # end-of-episode padding so it does not bias the baseline.
+            if action_masks is None:
+                action_loss = self.l1_loss(pred_actions, actions_target)
+            else:
+                action_mask = torch.as_tensor(
+                    np.asarray(action_masks), device=pred_actions.device, dtype=pred_actions.dtype
+                )[:, -self.action_horizon :]
+                elementwise_loss = torch.abs(pred_actions - actions_target)
+                action_loss = (elementwise_loss * action_mask.unsqueeze(-1)).sum() / (
+                    action_mask.sum().clamp_min(1) * pred_actions.shape[-1]
+                )
 
         return {"action_loss": action_loss}
 

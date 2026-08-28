@@ -290,6 +290,9 @@ class Qwen_PI_v3(baseframework):
         batch_images = [example["image"] for example in examples]  # List[List[PIL.Image]], length B
         instructions = [example["lang"] for example in examples]  # List[str], length B
         actions = [example["action"] for example in examples]  # List[ndarray (T, action_dim)]
+        action_masks = (
+            [example["action_mask"] for example in examples] if "action_mask" in examples[0] else None
+        )
         state = (
             [example["state"] for example in examples] if "state" in examples[0] else None
         )  # List[ndarray (1, state_dim)] or None
@@ -317,6 +320,12 @@ class Qwen_PI_v3(baseframework):
             )
             
             actions_target_repeated = actions_target.repeat(repeated_diffusion_steps, 1, 1)
+            action_mask_repeated = None
+            if action_masks is not None:
+                action_mask = torch.as_tensor(
+                    np.asarray(action_masks), device=base_hidden.device, dtype=base_hidden.dtype
+                )[:, -self.action_horizon :]
+                action_mask_repeated = action_mask.repeat(repeated_diffusion_steps, 1)
             # Repeat every VLM layer embedding to match the duplicated action batch.
             vl_embs_list_repeated = [h.repeat(repeated_diffusion_steps, 1, 1) for h in vl_embs_list]
             if backbone_attention_mask is not None:
@@ -334,6 +343,7 @@ class Qwen_PI_v3(baseframework):
                 actions_target_repeated,
                 state_repeated,
                 encoder_attention_mask=backbone_attention_mask,
+                action_loss_mask=action_mask_repeated,
             )
 
         return {"action_loss": action_loss}

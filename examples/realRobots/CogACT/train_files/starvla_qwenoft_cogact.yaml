@@ -1,0 +1,114 @@
+run_id: starvla_qwenoft_cogact
+run_root_dir: /data/yuming/starvla/checkpoints
+seed: 42
+wandb_entity: starrliu
+wandb_project: starvla
+is_debug: false
+
+framework:
+  name: QwenOFT
+  qwenvl:
+    base_vlm: /data/yuming/checkpoints/starvla_cogact/Qwen3-VL-4B-Instruct-Action
+    attn_implementation: sdpa
+  action_model:
+    action_model_type: MLP
+    action_dim: 20
+    state_dim: 20
+    action_horizon: 30
+
+# Native CogACT input. Add future datasets by appending entries to dataset_list;
+# no code or registry changes are required.
+datasets:
+  vla_data:
+    dataset_py: cogact_datasets
+    data_root_dir: /data/liluo/msra_process
+    per_device_batch_size: 8
+    num_workers: 8
+    pin_memory: true
+    persistent_workers: true
+    prefetch_factor: 2
+    seed: 42
+    merge_statistics: true  # frame-weighted global Gaussian stats, applied to every source
+    common:
+      action_horizon: 30
+      stride: 1
+      finished_padding_tolerance: 3  # match CogACT for normally completed episodes
+      action_source: auto       # actions_new_gripper > actions_cmd > actions_gaussian > actions
+      quality: [good, medium]   # also excludes frame_drop
+      view_names: [head_color, hand_left_color, hand_right_color]
+      image_drop_strategy: balanced_5way
+      image_augmentation: false
+      language_augmentation: false  # use stored canonical instructions verbatim
+      use_lmdb: true
+      image_size: [224, 224]    # [height, width]
+      image_resize_mode: stretch
+      normalization: mean_std   # matches the CogACT baseline
+      statistics_file: dataset_statistics.json
+    dataset_list:
+      - name: pp_g1
+        folder: cogact_pickplace_combined_20260730_161821_split_500_240h
+        metadata_file: episodic_dataset_20260730_235631.npy
+        weight: 1.0
+      - name: pp_g1_v2
+        folder: cogact_pickplace_combined_20260730_214315_split_500_240h
+        metadata_file: episodic_dataset_20260730_235736.npy
+        weight: 1.0
+      - name: sm_v1
+        folder: cogact_supermarket_combined_20260730_194207_split_500_240h
+        metadata_file: episodic_dataset_20260731_002223.npy
+        weight: 1.0
+      - name: sm_v2
+        folder: cogact_supermarket_combined_20260730_201819_split_500_240h
+        metadata_file: episodic_dataset_20260731_002304.npy
+        weight: 1.0
+      - name: sm_v3
+        folder: cogact_supermarket_combined_20260730_210432_split_500_240h
+        metadata_file: episodic_dataset_20260731_002341.npy
+        weight: 1.0
+      - name: pp_g1_v3
+        folder: cogact_pickplace_combined_20260810_101908_split_500_240h
+        metadata_file: episodic_dataset_20260810_124420.npy
+        weight: 1.0
+      - name: sm_v4
+        folder: cogact_supermarket_combined_20260810_060306_split_500_240h
+        metadata_file: episodic_dataset_20260810_140300.npy
+        weight: 1.0
+      - name: pp_g1_v4
+        folder: cogact_pickplace_combined_20260814_074923_split_500_240h
+        metadata_file: episodic_dataset_20260814_154915.npy
+        weight: 1.0
+      - name: pp_tea
+        folder: cogact_pickplace_combined_20260730_170228_split_500_240h
+        metadata_file: episodic_dataset_20260730_235704.npy
+        weight: 1.0
+      - name: pp_tea_v2
+        folder: cogact_pickplace_combined_20260730_190155_split_500_240h
+        metadata_file: episodic_dataset_20260730_235756.npy
+        weight: 1.0
+
+trainer:
+  max_train_steps: 100000
+  num_warmup_steps: 1000
+  save_interval: 10000
+  eval_interval: 1000
+  learning_rate:
+    base: 1.0e-05
+    qwen_vl_interface: 1.0e-05
+    action_model: 1.0e-04
+  lr_scheduler_type: cosine_with_min_lr
+  scheduler_specific_kwargs:
+    min_lr: 5.0e-07
+  freeze_modules: ''
+  loss_scale:
+    vla: 1.0
+  max_grad_norm: 1.0
+  weight_decay: 0.0
+  logging_frequency: 20
+  gradient_clipping: 1.0
+  gradient_accumulation_steps: 1
+  optimizer:
+    name: AdamW
+    betas: [0.9, 0.95]
+    eps: 1.0e-08
+    weight_decay: 1.0e-08
+  save_format: pt

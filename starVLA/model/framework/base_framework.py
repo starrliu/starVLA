@@ -57,7 +57,7 @@ def merge_config_overrides(model_config: dict, config_overrides: Sequence[str] |
         raise ValueError(f"Failed to parse config_overrides={overrides!r}: {exc}") from exc
 
 
-def _auto_import_framework_modules() -> None:
+def _auto_import_framework_modules(framework_id: str | None = None) -> None:
     global _FRAMEWORKS_IMPORTED
     if _FRAMEWORKS_IMPORTED:
         return
@@ -65,12 +65,22 @@ def _auto_import_framework_modules() -> None:
     _SKIP = {"__init__", "base_framework", "share_tools"}
     framework_dir = Path(__file__).resolve().parent
 
-    # Scan top-level modules (backwards compat)
+    # Most registry IDs match their module filename. Import that module first
+    # so building one framework does not require optional dependencies of every
+    # other framework in the repository.
+    if framework_id:
+        for package_dir in framework_dir.iterdir():
+            candidate = package_dir / f"{framework_id}.py"
+            if package_dir.is_dir() and candidate.is_file():
+                importlib.import_module(f"starVLA.model.framework.{package_dir.name}.{framework_id}")
+                if framework_id in FRAMEWORK_REGISTRY._registry:
+                    return
+
+    # Fallback for aliases whose registry ID differs from the module filename.
     for _, module_name, is_pkg in pkgutil.iter_modules([str(framework_dir)]):
         if module_name in _SKIP:
             continue
         if is_pkg:
-            # Scan sub-packages (VLM4A/, WM4A/, etc.)
             sub_dir = framework_dir / module_name
             for _, sub_name, _ in pkgutil.iter_modules([str(sub_dir)]):
                 if sub_name.startswith("_"):
@@ -93,9 +103,9 @@ def build_framework(cfg): # The single entry point for building different model 
     if not hasattr(cfg, "framework") or not hasattr(cfg.framework, "name"):
         raise ValueError("Missing `cfg.framework.name`. The framework API now only accepts `framework.name`.")
 
-    _auto_import_framework_modules()
-
     framework_id = cfg.framework.name
+    _auto_import_framework_modules(framework_id)
+
     if framework_id not in FRAMEWORK_REGISTRY._registry:
         available = sorted(FRAMEWORK_REGISTRY._registry.keys())
         raise NotImplementedError(

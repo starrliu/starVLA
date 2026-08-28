@@ -1,0 +1,10 @@
+compute_environment: LOCAL_MACHINE
+debug: false
+deepspeed_config:
+  deepspeed_config_file: examples/realRobots/CogACT/train_files/deepspeed_zero2.json
+  deepspeed_multinode_launcher: standard
+  zero3_init_flag: false
+distributed_type: DEEPSPEED
+mixed_precision: bf16
+num_machines: 1
+num_processes: 8

@@ -64,6 +64,26 @@ def build_dataloader(cfg, dataset_py="lerobot_datasets_oxe"): # TODO now here on
             output_dir = Path(cfg.output_dir)
             vla_dataset.save_dataset_statistics(output_dir / "dataset_statistics.json")
         return vla_train_dataloader
+    elif dataset_py == "cogact_datasets":
+        from starVLA.dataloader.cogact_datasets import collate_fn, get_cogact_dataset
+
+        vla_dataset_cfg = cfg.datasets.vla_data
+        vla_dataset = get_cogact_dataset(vla_dataset_cfg)
+        num_workers = int(vla_dataset_cfg.get("num_workers", 4))
+        dataloader_kwargs = {
+            "batch_size": vla_dataset_cfg.per_device_batch_size,
+            "collate_fn": collate_fn,
+            "num_workers": num_workers,
+            "pin_memory": bool(vla_dataset_cfg.get("pin_memory", True)),
+        }
+        if num_workers > 0:
+            dataloader_kwargs["persistent_workers"] = bool(vla_dataset_cfg.get("persistent_workers", True))
+            dataloader_kwargs["prefetch_factor"] = int(vla_dataset_cfg.get("prefetch_factor", 2))
+        vla_train_dataloader = DataLoader(vla_dataset, **dataloader_kwargs)
+        if not dist.is_initialized() or dist.get_rank() == 0:
+            output_dir = Path(cfg.output_dir)
+            vla_dataset.save_dataset_statistics(output_dir / "dataset_statistics.json")
+        return vla_train_dataloader
     elif dataset_py == "vlm_datasets":
         vlm_data_module = make_vlm_dataloader(cfg)
         vlm_train_dataloader = vlm_data_module["train_dataloader"]

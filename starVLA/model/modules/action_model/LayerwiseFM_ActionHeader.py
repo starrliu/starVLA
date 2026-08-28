@@ -291,6 +291,7 @@ class LayerwiseFlowmatchingActionHead(nn.Module):
         actions: torch.Tensor,
         state: torch.Tensor = None,
         encoder_attention_mask=None,
+        action_loss_mask: torch.Tensor = None,
     ):
         """
         vl_embs: list of torch.Tensor, each shape (B, seq_length, feature_dim)
@@ -342,9 +343,19 @@ class LayerwiseFlowmatchingActionHead(nn.Module):
         pred = self.action_decoder(model_output)
         pred_actions = pred[:, -actions.shape[1] :]
 
-        # Slice out only the action portion of pred and target.
-        loss = ((pred_actions - velocity) ** 2).mean()
-        return loss
+        # Slice out only the action portion of pred and target. Ignore
+        # repeated episode-tail padding when the dataloader provides a mask.
+        squared_error = (pred_actions - velocity) ** 2
+        if action_loss_mask is None:
+            return squared_error.mean()
+        mask = action_loss_mask.to(device=squared_error.device, dtype=squared_error.dtype)
+        if mask.ndim != 2 or mask.shape != squared_error.shape[:2]:
+            raise ValueError(
+                f"action_loss_mask must have shape {tuple(squared_error.shape[:2])}, got {tuple(mask.shape)}"
+            )
+        return (squared_error * mask.unsqueeze(-1)).sum() / (
+            mask.sum().clamp_min(1) * squared_error.shape[-1]
+        )
 
     @torch.no_grad()
     def predict_action(
