@@ -5,6 +5,7 @@ metadata:
   namespace: bonete05
 spec:
   queue: bonete05
+  priorityClassName: high
   minAvailable: 1
   plugins: {ssh: [], svc: [], env: []}
   tasks:
