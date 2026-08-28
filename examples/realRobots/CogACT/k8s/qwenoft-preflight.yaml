@@ -44,7 +44,7 @@ spec:
                   JOB_TAG=starvla-cogact-qwenoft-preflight-${CODE_REV:0:7}
                   DST=/data/yuming/code_copies/$JOB_TAG
                   rm -rf "$DST"
-                  git clone --depth 1 --branch cogact_baseline https://github.com/starrliu/starVLA.git "$DST"
+                  git clone --depth 10 --branch cogact_baseline https://github.com/starrliu/starVLA.git "$DST"
                   cd "$DST"
                   git checkout "$CODE_REV"
                   test "$(git rev-parse HEAD)" = "$CODE_REV"
