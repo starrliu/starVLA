@@ -1,0 +1,21 @@
+# Runtime dependencies for the B200 training image.
+# Keep the image-provided torch==2.8.0 and torchvision==0.23.0; do not install
+# the repository-wide torchvision==0.21.0 pin on this image.
+transformers==4.57.0
+accelerate==1.5.2
+deepspeed==0.16.9
+numpy==1.26.4
+scipy
+pillow
+omegaconf
+wandb
+rich
+diffusers
+timm
+einops
+tqdm
+lmdb
+safetensors
+qwen-vl-utils
+pydantic==2.10.6
+tensorboard
