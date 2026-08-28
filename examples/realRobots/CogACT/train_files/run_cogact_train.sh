@@ -67,8 +67,29 @@ if [[ -n "${REPEATED_DIFFUSION_STEPS}" ]]; then
 fi
 
 if [[ "${USE_DEEPSPEED}" == "1" ]]; then
+  # Accelerate rejects duplicate accumulation/precision values when an
+  # external DeepSpeed JSON is used. Materialize a per-run JSON containing the
+  # computed accumulation count and point a per-run Accelerate config at it.
+  runtime_config_dir="${RUN_ROOT_DIR}/${RUN_ID}/runtime_config"
+  mkdir -p "${runtime_config_dir}"
+  runtime_ds_config="$(realpath "${runtime_config_dir}/deepspeed_zero2.json")"
+  runtime_accelerate_config="${runtime_config_dir}/accelerate_zero2.yaml"
+  python - "${GRAD_ACCUMULATION_STEPS}" "${runtime_ds_config}" <<'PY'
+import json
+import sys
+
+steps, output_path = int(sys.argv[1]), sys.argv[2]
+with open("examples/realRobots/CogACT/train_files/deepspeed_zero2.json") as stream:
+    config = json.load(stream)
+config["gradient_accumulation_steps"] = steps
+with open(output_path, "w") as stream:
+    json.dump(config, stream, indent=2)
+PY
+  sed "s#examples/realRobots/CogACT/train_files/deepspeed_zero2.json#${runtime_ds_config}#" \
+    examples/realRobots/CogACT/train_files/accelerate_zero2.yaml > "${runtime_accelerate_config}"
+
   accelerate launch \
-    --config_file examples/realRobots/CogACT/train_files/accelerate_zero2.yaml \
+    --config_file "${runtime_accelerate_config}" \
     --num_processes "${NUM_PROCESSES}" \
     "${train_args[@]}"
 else
