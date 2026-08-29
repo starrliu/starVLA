@@ -358,10 +358,6 @@ class VLATrainer(TrainerUtils):
             step_metrics = self._train_step(batch_vla)
             t_end_model = time.perf_counter()
 
-            if self.accelerator.sync_gradients:
-                progress_bar.update(1)
-                self.completed_steps += 1
-
             if self.accelerator.is_local_main_process:
                 progress_bar.set_postfix(
                     {
@@ -370,18 +366,27 @@ class VLATrainer(TrainerUtils):
                     }
                 )
 
-            if self.completed_steps % self.config.trainer.eval_interval == 0:
-                step_metrics = self.eval_action_model(step_metrics)
+            # completed_steps, evaluation, logging, checkpointing, and the LR
+            # scheduler all use optimizer-step semantics. During gradient
+            # accumulation the intermediate micro-steps must have no side
+            # effects keyed by completed_steps (otherwise step 0 and every
+            # logging/save boundary run repeatedly).
+            if self.accelerator.sync_gradients:
+                progress_bar.update(1)
+                self.completed_steps += 1
 
-            step_metrics["timing/data"] = t_end_data - t_start_data
-            step_metrics["timing/model"] = t_end_model - t_start_model
-            self._log_metrics(step_metrics)
+                if self.completed_steps % self.config.trainer.eval_interval == 0:
+                    step_metrics = self.eval_action_model(step_metrics)
 
-            if self.completed_steps % self.config.trainer.save_interval == 0 and self.completed_steps > 0:
-                self._save_checkpoint()
+                step_metrics["timing/data"] = t_end_data - t_start_data
+                step_metrics["timing/model"] = t_end_model - t_start_model
+                self._log_metrics(step_metrics)
 
-            if self.completed_steps >= self.config.trainer.max_train_steps:
-                break
+                if self.completed_steps % self.config.trainer.save_interval == 0:
+                    self._save_checkpoint()
+
+                if self.completed_steps >= self.config.trainer.max_train_steps:
+                    break
 
         self._finalize_training()
 
