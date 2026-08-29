@@ -8,7 +8,11 @@ set -euo pipefail
 # USE_DEEPSPEED=0. This is primarily useful for single-GPU smoke tests.
 
 FRAMEWORK=${FRAMEWORK:-qwenoft}
-NUM_PROCESSES=${NUM_PROCESSES:-8}
+NUM_PROCESSES=${NUM_PROCESSES:-8}  # total processes across all machines
+NUM_MACHINES=${NUM_MACHINES:-1}
+MACHINE_RANK=${MACHINE_RANK:-0}
+MASTER_ADDR=${MASTER_ADDR:-127.0.0.1}
+MASTER_PORT=${MASTER_PORT:-29500}
 USE_DEEPSPEED=${USE_DEEPSPEED:-1}
 RUN_ROOT_DIR=${RUN_ROOT_DIR:-results/Checkpoints}
 MAX_STEPS=${MAX_STEPS:-100000}
@@ -78,7 +82,7 @@ if [[ "${USE_DEEPSPEED}" == "1" ]]; then
   # Accelerate rejects duplicate accumulation/precision values when an
   # external DeepSpeed JSON is used. Materialize a per-run JSON containing the
   # computed accumulation count and point a per-run Accelerate config at it.
-  runtime_config_dir="${RUN_ROOT_DIR}/${RUN_ID}/runtime_config"
+  runtime_config_dir="${RUN_ROOT_DIR}/${RUN_ID}/runtime_config/rank_${MACHINE_RANK}"
   mkdir -p "${runtime_config_dir}"
   runtime_ds_config="$(realpath "${runtime_config_dir}/deepspeed_zero2.json")"
   runtime_accelerate_config="${runtime_config_dir}/accelerate_zero2.yaml"
@@ -96,13 +100,19 @@ PY
   sed "s#examples/realRobots/CogACT/train_files/deepspeed_zero2.json#${runtime_ds_config}#" \
     examples/realRobots/CogACT/train_files/accelerate_zero2.yaml > "${runtime_accelerate_config}"
 
-  accelerate launch \
-    --config_file "${runtime_accelerate_config}" \
-    --num_processes "${NUM_PROCESSES}" \
-    "${train_args[@]}"
+  launch_args=(
+    --config_file "${runtime_accelerate_config}"
+    --num_processes "${NUM_PROCESSES}"
+    --num_machines "${NUM_MACHINES}"
+    --machine_rank "${MACHINE_RANK}"
+  )
+  if [[ "${NUM_MACHINES}" != "1" ]]; then
+    launch_args+=(--main_process_ip "${MASTER_ADDR}" --main_process_port "${MASTER_PORT}")
+  fi
+  accelerate launch "${launch_args[@]}" "${train_args[@]}"
 else
-  if [[ "${NUM_PROCESSES}" != "1" ]]; then
-    echo "USE_DEEPSPEED=0 currently supports NUM_PROCESSES=1 only." >&2
+  if [[ "${NUM_PROCESSES}" != "1" || "${NUM_MACHINES}" != "1" ]]; then
+    echo "USE_DEEPSPEED=0 currently supports one process on one machine only." >&2
     exit 2
   fi
   STARVLA_USE_DEEPSPEED=0 python "${train_args[@]}"
