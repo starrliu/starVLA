@@ -1,0 +1,120 @@
+apiVersion: batch.volcano.sh/v1alpha1
+kind: Job
+metadata:
+  name: yuming-starvla-cogact-qwenpi-v3-2node-preflight
+  namespace: bonete05
+spec:
+  queue: bonete05
+  priorityClassName: high
+  minAvailable: 2
+  plugins: {ssh: [], svc: [], env: []}
+  tasks:
+    - name: server
+      replicas: 1
+      minAvailable: 1
+      template:
+        metadata:
+          labels: {app: yuming-starvla-cogact-qwenpi-v3-2node-preflight}
+        spec:
+          schedulerName: volcano
+          restartPolicy: Never
+          affinity:
+            podAntiAffinity:
+              requiredDuringSchedulingIgnoredDuringExecution:
+                - labelSelector:
+                    matchLabels: {app: yuming-starvla-cogact-qwenpi-v3-2node-preflight}
+                  topologyKey: kubernetes.io/hostname
+          tolerations:
+            - {key: rdma, operator: Exists, effect: NoSchedule}
+            - {key: nvidia.com/gpu, operator: Exists, effect: NoSchedule}
+          volumes:
+            - name: dshm
+              emptyDir: {medium: Memory, sizeLimit: 100Gi}
+            - name: data
+              persistentVolumeClaim: {claimName: pvc-vast-bonete05}
+          containers:
+            - name: server
+              image: pytorch/pytorch:2.8.0-cuda12.8-cudnn9-devel
+              ports: [{name: rendezvous, containerPort: 29517}]
+              volumeMounts:
+                - {name: dshm, mountPath: /dev/shm}
+                - {name: data, mountPath: /data}
+              command: ["/bin/bash", "-lc"]
+              args:
+                - |
+                  set -euo pipefail
+                  CODE_REV=a603a9abc1dbcefe733c369c4a533053d1736308
+                  apt-get update -y && apt-get install -y --no-install-recommends git
+                  BOOT=/tmp/starvla-bootstrap
+                  git clone --depth 20 --branch cogact_baseline https://github.com/starrliu/starVLA.git "$BOOT"
+                  cd "$BOOT" && git checkout "$CODE_REV"
+                  SERVER_HOST="$(tr ',' '\n' < /etc/volcano/VC_SERVER_HOSTS | head -n1)"
+                  for _ in $(seq 1 90); do
+                    MASTER_ADDR="$(getent hosts "$SERVER_HOST" | awk 'NR==1{print $1}')"
+                    [[ -n "$MASTER_ADDR" ]] && break
+                    sleep 2
+                  done
+                  test -n "${MASTER_ADDR:-}"
+                  echo "MULTINODE node_rank=0 master=$MASTER_ADDR:29517 server_host=$SERVER_HOST"
+                  CODE_REV="$CODE_REV" NODE_RANK=0 NUM_MACHINES=2 NUM_PROCESSES=16 \
+                  MASTER_ADDR="$MASTER_ADDR" MASTER_PORT=29517 FRAMEWORK=qwenpi_v3 \
+                  RUN_ID=cogact-all-v5-qwenpi-v3-2node-preflight \
+                  GLOBAL_BATCH_SIZE=512 BATCH_SIZE=16 MAX_STEPS=20 \
+                    bash examples/realRobots/CogACT/train_files/run_k8s_multinode_worker.sh
+              resources:
+                requests: {nvidia.com/gpu: "8", cpu: "104", memory: "2600Gi", rdma/rdma_shared_device_a: "1"}
+                limits: {nvidia.com/gpu: "8", cpu: "104", memory: "2600Gi", rdma/rdma_shared_device_a: "1"}
+    - name: client
+      replicas: 1
+      minAvailable: 1
+      template:
+        metadata:
+          labels: {app: yuming-starvla-cogact-qwenpi-v3-2node-preflight}
+        spec:
+          schedulerName: volcano
+          restartPolicy: Never
+          affinity:
+            podAntiAffinity:
+              requiredDuringSchedulingIgnoredDuringExecution:
+                - labelSelector:
+                    matchLabels: {app: yuming-starvla-cogact-qwenpi-v3-2node-preflight}
+                  topologyKey: kubernetes.io/hostname
+          tolerations:
+            - {key: rdma, operator: Exists, effect: NoSchedule}
+            - {key: nvidia.com/gpu, operator: Exists, effect: NoSchedule}
+          volumes:
+            - name: dshm
+              emptyDir: {medium: Memory, sizeLimit: 100Gi}
+            - name: data
+              persistentVolumeClaim: {claimName: pvc-vast-bonete05}
+          containers:
+            - name: client
+              image: pytorch/pytorch:2.8.0-cuda12.8-cudnn9-devel
+              volumeMounts:
+                - {name: dshm, mountPath: /dev/shm}
+                - {name: data, mountPath: /data}
+              command: ["/bin/bash", "-lc"]
+              args:
+                - |
+                  set -euo pipefail
+                  CODE_REV=a603a9abc1dbcefe733c369c4a533053d1736308
+                  apt-get update -y && apt-get install -y --no-install-recommends git
+                  BOOT=/tmp/starvla-bootstrap
+                  git clone --depth 20 --branch cogact_baseline https://github.com/starrliu/starVLA.git "$BOOT"
+                  cd "$BOOT" && git checkout "$CODE_REV"
+                  SERVER_HOST="$(tr ',' '\n' < /etc/volcano/VC_SERVER_HOSTS | head -n1)"
+                  for _ in $(seq 1 90); do
+                    MASTER_ADDR="$(getent hosts "$SERVER_HOST" | awk 'NR==1{print $1}')"
+                    [[ -n "$MASTER_ADDR" ]] && break
+                    sleep 2
+                  done
+                  test -n "${MASTER_ADDR:-}"
+                  echo "MULTINODE node_rank=1 master=$MASTER_ADDR:29517 server_host=$SERVER_HOST"
+                  CODE_REV="$CODE_REV" NODE_RANK=1 NUM_MACHINES=2 NUM_PROCESSES=16 \
+                  MASTER_ADDR="$MASTER_ADDR" MASTER_PORT=29517 FRAMEWORK=qwenpi_v3 \
+                  RUN_ID=cogact-all-v5-qwenpi-v3-2node-preflight \
+                  GLOBAL_BATCH_SIZE=512 BATCH_SIZE=16 MAX_STEPS=20 \
+                    bash examples/realRobots/CogACT/train_files/run_k8s_multinode_worker.sh
+              resources:
+                requests: {nvidia.com/gpu: "8", cpu: "104", memory: "2600Gi", rdma/rdma_shared_device_a: "1"}
+                limits: {nvidia.com/gpu: "8", cpu: "104", memory: "2600Gi", rdma/rdma_shared_device_a: "1"}
