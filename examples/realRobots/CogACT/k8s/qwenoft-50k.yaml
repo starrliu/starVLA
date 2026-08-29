@@ -46,7 +46,7 @@ spec:
                   apt-get update -y
                   apt-get install -y --no-install-recommends git libgl1 libglib2.0-0
 
-                  CODE_REV=456830711ef9b735767548bb8a8e52500de5f9bc
+                  CODE_REV=0a095d6b0dab324aadc469a96a21ca78cf994f33
                   JOB_TAG=starvla-cogact-qwenoft-50k
                   DST=/data/yuming/code_copies/$JOB_TAG
                   if [[ ! -d "$DST/.git" ]]; then
@@ -90,7 +90,7 @@ spec:
                   NUM_PROCESSES=8 \
                   USE_DEEPSPEED=1 \
                   GLOBAL_BATCH_SIZE=512 \
-                  BATCH_SIZE=8 \
+                  BATCH_SIZE=32 \
                   NUM_WORKERS=4 \
                   DATA_ROOT=/data/liluo/msra_process \
                   MAX_STEPS=50000 \
