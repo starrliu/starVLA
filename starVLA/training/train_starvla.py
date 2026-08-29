@@ -380,6 +380,9 @@ class VLATrainer(TrainerUtils):
 
                 step_metrics["timing/data"] = t_end_data - t_start_data
                 step_metrics["timing/model"] = t_end_model - t_start_model
+                if torch.cuda.is_available():
+                    step_metrics["memory/max_allocated_gib"] = torch.cuda.max_memory_allocated() / (1024**3)
+                    step_metrics["memory/max_reserved_gib"] = torch.cuda.max_memory_reserved() / (1024**3)
                 self._log_metrics(step_metrics)
 
                 if self.completed_steps % self.config.trainer.save_interval == 0:
@@ -458,7 +461,8 @@ class VLATrainer(TrainerUtils):
 
     def _finalize_training(self):
         """Training end processing."""
-        if self.accelerator.is_main_process:
+        save_final_model = getattr(self.config.trainer, "save_final_model", True)
+        if self.accelerator.is_main_process and save_final_model:
             save_format = getattr(self.config.trainer, "save_format", "pt")
             final_checkpoint = os.path.join(self.config.output_dir, "final_model")
             os.makedirs(final_checkpoint, exist_ok=True)
@@ -472,6 +476,8 @@ class VLATrainer(TrainerUtils):
             else:
                 raise ValueError(f"Unsupported save_format `{save_format}`. Expected `pt` or `safetensors`.")
             logger.info(f"Training complete. Final model saved at {final_checkpoint}")
+        elif self.accelerator.is_main_process:
+            logger.info("Training complete. Final model save disabled by trainer.save_final_model=false.")
 
         if self.accelerator.is_main_process and getattr(self, "_wandb_enabled", False):
             try:
