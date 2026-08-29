@@ -40,7 +40,7 @@ spec:
                   apt-get update -y
                   apt-get install -y --no-install-recommends git libgl1 libglib2.0-0
 
-                  CODE_REV=a216beec5c7405d843b33cd8f1234c166bdebab6
+                  CODE_REV=607034e6617010e6ff4fc9ff66c2318064ff4fe0
                   JOB_TAG=starvla-cogact-qwenpi-v3-preflight
                   DST=/data/yuming/code_copies/$JOB_TAG
                   if [[ ! -d "$DST/.git" ]]; then
@@ -89,7 +89,7 @@ spec:
                   BATCH_SIZE=8 \
                   NUM_WORKERS=4 \
                   DATA_ROOT=/data/liluo/msra_process \
-                  MAX_STEPS=20 \
+                  MAX_STEPS=2 \
                   RUN_ROOT_DIR=/data/yuming/starvla/checkpoints \
                   RUN_ID="$RUN_ID" \
                     bash examples/realRobots/CogACT/train_files/run_cogact_train.sh \
