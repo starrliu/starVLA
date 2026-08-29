@@ -12,6 +12,8 @@ NUM_PROCESSES=${NUM_PROCESSES:-8}
 USE_DEEPSPEED=${USE_DEEPSPEED:-1}
 RUN_ROOT_DIR=${RUN_ROOT_DIR:-results/Checkpoints}
 MAX_STEPS=${MAX_STEPS:-100000}
+SAVE_INTERVAL=${SAVE_INTERVAL:-10000}
+IS_RESUME=${IS_RESUME:-false}
 BATCH_SIZE=${BATCH_SIZE:-8}
 GLOBAL_BATCH_SIZE=${GLOBAL_BATCH_SIZE:-512}
 NUM_WORKERS=${NUM_WORKERS:-8}
@@ -54,6 +56,8 @@ train_args=(
   --datasets.vla_data.num_workers "${NUM_WORKERS}"
   --trainer.freeze_modules "${FREEZE_MODULES}"
   --trainer.max_train_steps "${MAX_STEPS}"
+  --trainer.save_interval "${SAVE_INTERVAL}"
+  --trainer.is_resume "${IS_RESUME}"
   --trainer.gradient_accumulation_steps "${GRAD_ACCUMULATION_STEPS}"
   --run_root_dir "${RUN_ROOT_DIR}"
   --run_id "${RUN_ID}"
