@@ -26,6 +26,16 @@ spec:
           tolerations:
             - {key: rdma, operator: Exists, effect: NoSchedule}
             - {key: nvidia.com/gpu, operator: Exists, effect: NoSchedule}
+          # hgx-0265 had ~90 GiB/GPU of non-job memory during two independent
+          # runs, causing false OOMs for configurations verified on clean nodes.
+          affinity:
+            nodeAffinity:
+              requiredDuringSchedulingIgnoredDuringExecution:
+                nodeSelectorTerms:
+                  - matchExpressions:
+                      - key: kubernetes.io/hostname
+                        operator: NotIn
+                        values: [slc01-cl02-hgx-0265]
           containers:
             - name: server
               image: pytorch/pytorch:2.8.0-cuda12.8-cudnn9-devel
