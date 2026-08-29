@@ -34,7 +34,7 @@ except ImportError:
 import wandb
 from accelerate import Accelerator, DeepSpeedPlugin
 from accelerate.logging import get_logger
-from accelerate.utils import set_seed
+from accelerate.utils import GradientAccumulationPlugin, set_seed
 from omegaconf import OmegaConf
 from torch.utils.data import DataLoader
 from tqdm import tqdm
@@ -50,11 +50,15 @@ from starVLA.training.trainer_utils.trainer_tools import TrainerUtils, build_par
 use_deepspeed = os.environ.get("STARVLA_USE_DEEPSPEED", "1").lower() not in {"0", "false", "no"}
 gradient_accumulation_steps = int(os.environ.get("STARVLA_GRADIENT_ACCUMULATION_STEPS", "1"))
 deepspeed_plugin = DeepSpeedPlugin() if use_deepspeed else None
+gradient_accumulation_plugin = GradientAccumulationPlugin(
+    num_steps=gradient_accumulation_steps,
+    # ZeRO-2 partitions gradients and rejects DDP-style no_sync(). DeepSpeed
+    # performs its own communication/accumulation at the configured boundary.
+    sync_each_batch=use_deepspeed,
+)
 accelerator = Accelerator(
     deepspeed_plugin=deepspeed_plugin,
-    # Keep Accelerate's sync_gradients/progress/scheduler semantics aligned
-    # with the identical value materialized into the DeepSpeed runtime JSON.
-    gradient_accumulation_steps=gradient_accumulation_steps,
+    gradient_accumulation_plugin=gradient_accumulation_plugin,
 )
 accelerator.print(accelerator.state)
 
