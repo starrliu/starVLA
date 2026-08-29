@@ -52,9 +52,9 @@ gradient_accumulation_steps = int(os.environ.get("STARVLA_GRADIENT_ACCUMULATION_
 deepspeed_plugin = DeepSpeedPlugin() if use_deepspeed else None
 accelerator = Accelerator(
     deepspeed_plugin=deepspeed_plugin,
-    # With an external DeepSpeed config, accumulation must be specified in
-    # that JSON rather than duplicated in Accelerator kwargs.
-    **({} if use_deepspeed else {"gradient_accumulation_steps": gradient_accumulation_steps}),
+    # Keep Accelerate's sync_gradients/progress/scheduler semantics aligned
+    # with the identical value materialized into the DeepSpeed runtime JSON.
+    gradient_accumulation_steps=gradient_accumulation_steps,
 )
 accelerator.print(accelerator.state)
 
