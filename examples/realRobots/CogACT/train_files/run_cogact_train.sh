@@ -14,6 +14,7 @@ RUN_ROOT_DIR=${RUN_ROOT_DIR:-results/Checkpoints}
 MAX_STEPS=${MAX_STEPS:-100000}
 SAVE_INTERVAL=${SAVE_INTERVAL:-10000}
 SAVE_FINAL_MODEL=${SAVE_FINAL_MODEL:-true}
+LOGGING_FREQUENCY=${LOGGING_FREQUENCY:-20}
 IS_RESUME=${IS_RESUME:-false}
 BATCH_SIZE=${BATCH_SIZE:-8}
 GLOBAL_BATCH_SIZE=${GLOBAL_BATCH_SIZE:-512}
@@ -59,6 +60,7 @@ train_args=(
   --trainer.max_train_steps "${MAX_STEPS}"
   --trainer.save_interval "${SAVE_INTERVAL}"
   --trainer.save_final_model "${SAVE_FINAL_MODEL}"
+  --trainer.logging_frequency "${LOGGING_FREQUENCY}"
   --trainer.is_resume "${IS_RESUME}"
   --trainer.gradient_accumulation_steps "${GRAD_ACCUMULATION_STEPS}"
   --run_root_dir "${RUN_ROOT_DIR}"
