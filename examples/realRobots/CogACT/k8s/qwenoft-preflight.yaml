@@ -40,13 +40,14 @@ spec:
                   apt-get update -y
                   apt-get install -y --no-install-recommends git libgl1 libglib2.0-0
 
-                  CODE_REV=9779b4dde95d6b4b72d210109cf8fba8ffc50201
-                  JOB_TAG=starvla-cogact-qwenoft-preflight-${CODE_REV:0:7}
+                  CODE_REV=dbbc1ea13f3abadf9b365d7be1c348e547c7108d
+                  JOB_TAG=starvla-cogact-qwenoft-preflight-9779b4d
                   DST=/data/yuming/code_copies/$JOB_TAG
                   if [[ ! -d "$DST/.git" ]]; then
                     git clone --depth 10 --branch cogact_baseline https://github.com/starrliu/starVLA.git "$DST"
                   fi
                   cd "$DST"
+                  git fetch --depth 10 origin cogact_baseline
                   git checkout "$CODE_REV"
                   test "$(git rev-parse HEAD)" = "$CODE_REV"
 
